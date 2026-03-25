@@ -1,20 +1,9 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  chunkText,
-  concatenateAudioFiles,
-  createWorkingDirectory,
-  extractReferenceSample,
-  persistUploadedAudio,
-  removeWorkingDirectory,
-  writeChunkAudio,
-} from "@/lib/audio";
-import {
   assertCoquiServerAvailable,
   getCoquiConfig,
-  synthesizeChunk,
+  synthesize,
 } from "@/lib/coqui";
 
 export const runtime = "nodejs";
@@ -55,10 +44,7 @@ export async function POST(request: Request) {
   const text = formData.get("text");
   const audio = formData.get("audio");
 
-  const parsed = requestSchema.safeParse({
-    language,
-    text,
-  });
+  const parsed = requestSchema.safeParse({ language, text });
 
   if (!parsed.success) {
     return toJsonError(parsed.error.issues[0]?.message ?? "Invalid request.");
@@ -73,50 +59,24 @@ export async function POST(request: Request) {
   }
 
   const config = getCoquiConfig();
-  let workingDirectory: string | null = null;
 
   try {
     await assertCoquiServerAvailable(config);
 
-    workingDirectory = await createWorkingDirectory();
+    const { audioBuffer, chunkCount } = await synthesize({
+      baseUrl: config.baseUrl,
+      language: parsed.data.language,
+      text: parsed.data.text,
+      audioFile: audio,
+      timeoutMs: config.timeoutMs,
+    });
 
-    const uploadedAudioPath = await persistUploadedAudio(audio, workingDirectory);
-    const referenceSamplePath = await extractReferenceSample(
-      uploadedAudioPath,
-      workingDirectory,
-      config.voiceSampleSeconds,
-    );
-    const chunks = chunkText(parsed.data.text);
-
-    if (chunks.length === 0) {
-      return toJsonError("Please paste French or Spanish text.");
-    }
-
-    const outputChunkPaths: string[] = [];
-
-    for (const [index, chunk] of chunks.entries()) {
-      const chunkAudio = await synthesizeChunk({
-        baseUrl: config.baseUrl,
-        text: chunk,
-        languageId: parsed.data.language,
-        speakerWavPath: referenceSamplePath,
-        timeoutMs: config.timeoutMs,
-      });
-
-      const chunkPath = await writeChunkAudio(chunkAudio, workingDirectory, index);
-      outputChunkPaths.push(chunkPath);
-    }
-
-    const outputPath = await concatenateAudioFiles(outputChunkPaths, workingDirectory);
-    const outputBuffer = await readFile(outputPath);
-    const outputName = `${parsed.data.language}-${path.basename(outputPath)}`;
-
-    return new NextResponse(outputBuffer, {
+    return new NextResponse(audioBuffer, {
       status: 200,
       headers: {
         "Content-Type": "audio/wav",
-        "Content-Disposition": `attachment; filename="${outputName}"`,
-        "X-Coqui-Chunks": String(chunks.length),
+        "Content-Disposition": `attachment; filename="${parsed.data.language}-output.wav"`,
+        "X-Coqui-Chunks": String(chunkCount),
       },
     });
   } catch (error) {
@@ -125,9 +85,5 @@ export async function POST(request: Request) {
     const status = /not reachable|timed out/i.test(message) ? 502 : 500;
 
     return toJsonError(message, status);
-  } finally {
-    if (workingDirectory) {
-      await removeWorkingDirectory(workingDirectory);
-    }
   }
 }

@@ -1,0 +1,14 @@
+services:
+  coqui:
+    build: ./coqui
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./models:/root/.local/share/tts
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

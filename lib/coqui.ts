@@ -1,17 +1,8 @@
-const DEFAULT_BASE_URL = "http://127.0.0.1:5002";
-const DEFAULT_TIMEOUT_MS = 120000;
+const DEFAULT_BASE_URL = "http://localhost:5001";
+const DEFAULT_TIMEOUT_MS = 180000;
 
 type CoquiConfig = {
   baseUrl: string;
-  timeoutMs: number;
-  voiceSampleSeconds: number;
-};
-
-type SynthesizeChunkInput = {
-  baseUrl: string;
-  text: string;
-  languageId: string;
-  speakerWavPath: string;
   timeoutMs: number;
 };
 
@@ -21,15 +12,10 @@ function normalizeBaseUrl(baseUrl: string) {
 
 export function getCoquiConfig(): CoquiConfig {
   const timeoutMs = Number(process.env.COQUI_REQUEST_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
-  const voiceSampleSeconds = Number(process.env.COQUI_VOICE_SAMPLE_SECONDS ?? 15);
 
   return {
-    baseUrl: normalizeBaseUrl(process.env.COQUI_BASE_URL ?? DEFAULT_BASE_URL),
+    baseUrl: normalizeBaseUrl(process.env.COQUI_URL ?? DEFAULT_BASE_URL),
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
-    voiceSampleSeconds:
-      Number.isFinite(voiceSampleSeconds) && voiceSampleSeconds > 0
-        ? voiceSampleSeconds
-        : 15,
   };
 }
 
@@ -53,49 +39,53 @@ export async function assertCoquiServerAvailable(config: CoquiConfig) {
   const timeout = setTimeout(() => controller.abort(), Math.min(config.timeoutMs, 5000));
 
   try {
-    const response = await fetch(config.baseUrl, {
+    const response = await fetch(`${config.baseUrl}/health`, {
       method: "GET",
       signal: controller.signal,
       cache: "no-store",
     });
 
     if (!response.ok) {
-      throw new Error(`Coqui server responded with ${response.status}.`);
+      throw new Error(`Coqui GPU server responded with ${response.status}.`);
     }
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Timed out while contacting the Coqui server.");
+      throw new Error("Timed out while contacting the Coqui GPU server.");
     }
 
-    throw new Error("Coqui server is not reachable. Make sure it is running.");
+    throw new Error("Coqui GPU server is not reachable. Make sure the container is running.");
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export async function synthesizeChunk({
+type SynthesizeInput = {
+  baseUrl: string;
+  language: string;
+  text: string;
+  audioFile: File;
+  timeoutMs: number;
+};
+
+export async function synthesize({
   baseUrl,
+  language,
   text,
-  languageId,
-  speakerWavPath,
+  audioFile,
   timeoutMs,
-}: SynthesizeChunkInput) {
+}: SynthesizeInput) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const body = new URLSearchParams({
-    text,
-    "speaker-wav": speakerWavPath,
-    "language-id": languageId,
-  });
+
+  const formData = new FormData();
+  formData.set("language", language);
+  formData.set("text", text);
+  formData.set("audio", audioFile);
 
   try {
-    const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/tts`, {
+    const response = await fetch(`${normalizeBaseUrl(baseUrl)}/synthesize`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "audio/wav",
-      },
-      body,
+      body: formData,
       signal: controller.signal,
       cache: "no-store",
     });
@@ -107,10 +97,13 @@ export async function synthesizeChunk({
       );
     }
 
-    return Buffer.from(await response.arrayBuffer());
+    const chunkCount = Number(response.headers.get("x-coqui-chunks") ?? "1");
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+    return { audioBuffer, chunkCount };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Timed out while waiting for the Coqui server response.");
+      throw new Error("Timed out while waiting for the Coqui GPU server response.");
     }
 
     throw error;
