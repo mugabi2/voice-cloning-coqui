@@ -77,10 +77,10 @@ New files at `d:\Phaneroo IT Dept\voice clonings\gpu-services\coqui\` (sibling t
 
 Modified files in existing Next.js app (`d:\Phaneroo IT Dept\voice clonings\coqui\`):
 
-- `**lib/coqui.ts**` -- rewrite to send multipart form data (actual file, not a path) to `/synthesize`
-- `**app/api/generate/route.ts**` -- simplify to just forward form data to GPU and return the audio response
-- `**lib/audio.ts**` -- remove (all ffmpeg/chunking moves into the GPU container)
-- `**.env.example**` -- update URL to `http://<gpu-ip>:5001`
+- `**lib/coqui.ts`** -- rewrite to send multipart form data (actual file, not a path) to `/synthesize`
+- `**app/api/generate/route.ts`** -- simplify to just forward form data to GPU and return the audio response
+- `**lib/audio.ts`** -- remove (all ffmpeg/chunking moves into the GPU container)
+- `**.env.example`** -- update URL to `http://<gpu-ip>:5001`
 
 ---
 

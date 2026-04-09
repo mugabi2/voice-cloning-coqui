@@ -38,10 +38,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Coqui XTTS v2 GPU Service", lifespan=lifespan)
 
 
-# ---------------------------------------------------------------------------
-# Health
-# ---------------------------------------------------------------------------
-
 @app.get("/health")
 def health():
     return {
@@ -50,10 +46,6 @@ def health():
         "gpu": torch.cuda.is_available(),
     }
 
-
-# ---------------------------------------------------------------------------
-# Audio helpers
-# ---------------------------------------------------------------------------
 
 def detect_extension(filename: str, content_type: str) -> str:
     ext = Path(filename).suffix
@@ -76,12 +68,17 @@ def detect_extension(filename: str, content_type: str) -> str:
 def extract_reference(input_path: str, output_path: str) -> None:
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-i", input_path,
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_path,
             "-vn",
-            "-t", str(REFERENCE_SAMPLE_SECONDS),
-            "-ac", "1",
-            "-ar", str(REFERENCE_SAMPLE_RATE),
+            "-t",
+            str(REFERENCE_SAMPLE_SECONDS),
+            "-ac",
+            "1",
+            "-ar",
+            str(REFERENCE_SAMPLE_RATE),
             output_path,
         ],
         check=True,
@@ -94,9 +91,7 @@ def concatenate_wavs(input_paths: list[str], output_path: str) -> None:
         shutil.copy2(input_paths[0], output_path)
         return
 
-    concat_list = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    )
+    concat_list = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
     try:
         for p in input_paths:
             concat_list.write(f"file '{p}'\n")
@@ -104,13 +99,20 @@ def concatenate_wavs(input_paths: list[str], output_path: str) -> None:
 
         subprocess.run(
             [
-                "ffmpeg", "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", concat_list.name,
-                "-acodec", "pcm_s16le",
-                "-ar", str(REFERENCE_SAMPLE_RATE),
-                "-ac", "1",
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                concat_list.name,
+                "-acodec",
+                "pcm_s16le",
+                "-ar",
+                str(REFERENCE_SAMPLE_RATE),
+                "-ac",
+                "1",
                 output_path,
             ],
             check=True,
@@ -119,10 +121,6 @@ def concatenate_wavs(input_paths: list[str], output_path: str) -> None:
     finally:
         os.unlink(concat_list.name)
 
-
-# ---------------------------------------------------------------------------
-# Text chunking  (matches the existing Next.js logic in lib/audio.ts)
-# ---------------------------------------------------------------------------
 
 def chunk_text(text: str, max_length: int = MAX_CHUNK_LENGTH) -> list[str]:
     cleaned = re.sub(r"\s+", " ", text).strip()
@@ -170,10 +168,6 @@ def chunk_text(text: str, max_length: int = MAX_CHUNK_LENGTH) -> list[str]:
 
     return chunks
 
-
-# ---------------------------------------------------------------------------
-# Synthesize endpoint
-# ---------------------------------------------------------------------------
 
 @app.post("/synthesize")
 async def synthesize(
@@ -239,3 +233,4 @@ async def synthesize(
         shutil.rmtree(work_dir, ignore_errors=True)
         logger.exception("Synthesis failed")
         raise HTTPException(status_code=500, detail=str(exc))
+

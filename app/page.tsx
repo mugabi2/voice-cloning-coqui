@@ -26,9 +26,7 @@ export default function HomePage() {
               Keep <code>ffmpeg</code> support available for trimming and
               concatenating audio.
             </li>
-            <li>
-              Use French or Spanish text to match the language selected above.
-            </li>
+            <li>Use French or Spanish text to match the language selected above.</li>
           </ul>
         </section>
       </div>

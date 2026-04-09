@@ -5,3 +5,4 @@ coqui-tts
 transformers>=4.57,<5.0
 soundfile
 numpy
+
